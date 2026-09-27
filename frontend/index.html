@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Fix_Flow — AI-Powered Code Debugger</title>
+  <link rel="stylesheet" href="/static/css/style.css" />
+  <!-- CodeMirror 5 from CDN for syntax-highlighted editing -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/dracula.min.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/python/python.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/clike/clike.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/closebrackets.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/matchbrackets.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/selection/active-line.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/lint/lint.min.js"></script>
+</head>
+<body>
+  <!-- ── Top Bar ─────────────────────────────────────────────────────────── -->
+  <header class="topbar">
+    <div class="topbar-left">
+      <span class="logo">⚙ Fix_Flow</span>
+      <span class="logo-sub">IBM Bob 2.0 Hackathon</span>
+    </div>
+    <div class="topbar-center">
+      <div class="lang-selector-wrap">
+        <label for="lang-select">Language:</label>
+        <select id="lang-select">
+          <option value="python" selected>Python</option>
+          <option value="java" disabled title="Coming soon">Java (soon)</option>
+          <option value="cpp" disabled title="Coming soon">C++ (soon)</option>
+        </select>
+      </div>
+      <div id="filename-wrap">
+        <input type="text" id="filename-input" value="untitled.py" spellcheck="false" />
+      </div>
+    </div>
+    <div class="topbar-right">
+      <div id="bob-status-badge" class="badge badge-checking">
+        <span class="badge-dot"></span>
+        <span id="bob-status-text">Checking Bob…</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ── Main Layout ────────────────────────────────────────────────────── -->
+  <div class="main-layout">
+
+    <!-- ── Left: File Explorer ─────────────────────────────────────────── -->
+    <aside class="file-explorer">
+      <div class="panel-header">
+        <span class="panel-icon">📁</span> Explorer
+      </div>
+      <ul class="file-list" id="file-list">
+        <li class="file-item active" data-file="untitled.py">
+          <span class="file-icon">🐍</span> untitled.py
+        </li>
+      </ul>
+      <div class="explorer-footer">
+        <button class="btn-new-file" id="btn-new-file" title="New file">+ New File</button>
+      </div>
+    </aside>
+
+    <!-- ── Center: Editor + Output ──────────────────────────────────────── -->
+    <section class="editor-section">
+
+      <!-- Editor toolbar -->
+      <div class="editor-toolbar">
+        <button class="btn btn-run" id="btn-run" title="Run code (Ctrl+Enter)">
+          ▶ Run
+        </button>
+        <button class="btn btn-analyze" id="btn-analyze" title="Quick static analysis">
+          🔍 Analyze
+        </button>
+        <button class="btn btn-debug" id="btn-debug" title="Full AI debugging workflow">
+          🤖 Debug with Bob
+        </button>
+        <div class="toolbar-spacer"></div>
+        <button class="btn btn-ghost btn-clear-output" id="btn-clear-output" title="Clear output">
+          Clear Output
+        </button>
+      </div>
+
+      <!-- CodeMirror editor mount point -->
+      <div class="editor-wrap">
+        <div id="editor-mount"></div>
+
+        <!-- Inline correction banner (shown when corrections are detected) -->
+        <div id="correction-banner" class="correction-banner hidden">
+          <span class="correction-icon">✏️</span>
+          <span id="correction-message"></span>
+          <button class="btn-correction-apply" id="btn-correction-apply">Apply</button>
+          <button class="btn-correction-dismiss" id="btn-correction-dismiss">✕</button>
+        </div>
+      </div>
+
+      <!-- Output / Run Console -->
+      <div class="output-panel" id="output-panel">
+        <div class="output-header">
+          <span>Console Output</span>
+          <span id="run-status-badge" class="run-status"></span>
+        </div>
+        <pre class="output-content" id="output-content">Run your code to see output here.</pre>
+      </div>
+
+    </section>
+
+    <!-- ── Right: Workflow + Results Panel ──────────────────────────────── -->
+    <aside class="workflow-panel" id="workflow-panel">
+
+      <!-- Analysis Results -->
+      <div class="panel-section" id="section-analysis">
+        <div class="panel-header collapsible" data-target="analysis-body">
+          <span class="panel-icon">🔍</span> Code Analysis
+          <span class="collapse-arrow">▾</span>
+        </div>
+        <div class="panel-body" id="analysis-body">
+          <div class="placeholder-text" id="analysis-placeholder">
+            Run <strong>Analyze</strong> or <strong>Debug with Bob</strong> to see results.
+          </div>
+          <div id="analysis-results" class="hidden"></div>
+        </div>
+      </div>
+
+      <!-- Bob Workflow Steps -->
+      <div class="panel-section" id="section-workflow">
+        <div class="panel-header collapsible" data-target="workflow-body">
+          <span class="panel-icon">🤖</span> Bob AI Workflow
+          <span class="collapse-arrow">▾</span>
+        </div>
+        <div class="panel-body" id="workflow-body">
+          <div class="placeholder-text" id="workflow-placeholder">
+            Click <strong>Debug with Bob</strong> to start the AI debugging workflow.
+          </div>
+          <div id="workflow-steps" class="hidden">
+            <div class="workflow-step" id="wf-code_analysis">
+              <span class="step-icon">⬜</span>
+              <span class="step-label">Code Analysis</span>
+              <span class="step-status"></span>
+            </div>
+            <div class="workflow-step" id="wf-run_original">
+              <span class="step-icon">⬜</span>
+              <span class="step-label">Run Original Code</span>
+              <span class="step-status"></span>
+            </div>
+            <div class="workflow-step" id="wf-bob_code_analysis">
+              <span class="step-icon">⬜</span>
+              <span class="step-label">Bob: Code Analysis</span>
+              <span class="step-status"></span>
+            </div>
+            <div class="workflow-step" id="wf-logic_analysis">
+              <span class="step-icon">⬜</span>
+              <span class="step-label">Bob: Logic Analysis</span>
+              <span class="step-status"></span>
+            </div>
+            <div class="workflow-step" id="wf-test_generation">
+              <span class="step-icon">⬜</span>
+              <span class="step-label">Bob: Test Generation</span>
+              <span class="step-status"></span>
+            </div>
+            <div class="workflow-step" id="wf-regression_testing_original">
+              <span class="step-icon">⬜</span>
+              <span class="step-label">Run Tests (Original)</span>
+              <span class="step-status"></span>
+            </div>
+            <div class="workflow-step" id="wf-root_cause_analysis">
+              <span class="step-icon">⬜</span>
+              <span class="step-label">Bob: Root Cause Analysis</span>
+              <span class="step-status"></span>
+            </div>
+            <div class="workflow-step" id="wf-fix_generation">
+              <span class="step-icon">⬜</span>
+              <span class="step-label">Bob: Fix Generation</span>
+              <span class="step-status"></span>
+            </div>
+            <div class="workflow-step" id="wf-run_fixed">
+              <span class="step-icon">⬜</span>
+              <span class="step-label">Run Fixed Code</span>
+              <span class="step-status"></span>
+            </div>
+            <div class="workflow-step" id="wf-regression_testing">
+              <span class="step-icon">⬜</span>
+              <span class="step-label">Regression Testing</span>
+              <span class="step-status"></span>
+            </div>
+            <div class="workflow-step" id="wf-verification">
+              <span class="step-icon">⬜</span>
+              <span class="step-label">Bob: Independent Verification</span>
+              <span class="step-status"></span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Test Results -->
+      <div class="panel-section" id="section-tests">
+        <div class="panel-header collapsible" data-target="tests-body">
+          <span class="panel-icon">🧪</span> Test Results
+          <span class="collapse-arrow">▾</span>
+        </div>
+        <div class="panel-body" id="tests-body">
+          <div class="placeholder-text" id="tests-placeholder">No tests run yet.</div>
+          <div id="test-results" class="hidden"></div>
+        </div>
+      </div>
+
+      <!-- Proposed Fix / Diff View -->
+      <div class="panel-section" id="section-fix">
+        <div class="panel-header collapsible" data-target="fix-body">
+          <span class="panel-icon">🔧</span> Proposed Fix
+          <span class="collapse-arrow">▾</span>
+        </div>
+        <div class="panel-body" id="fix-body">
+          <div class="placeholder-text" id="fix-placeholder">No fix generated yet.</div>
+          <div id="fix-view" class="hidden">
+            <div class="fix-meta" id="fix-meta"></div>
+            <div class="diff-container" id="diff-container"></div>
+            <div class="fix-actions">
+              <button class="btn btn-apply-fix" id="btn-apply-fix">✅ Apply Fix</button>
+              <button class="btn btn-keep-original" id="btn-keep-original">↩ Keep Original</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Verification Result -->
+      <div class="panel-section" id="section-verification">
+        <div class="panel-header collapsible" data-target="verification-body">
+          <span class="panel-icon">✅</span> Verification
+          <span class="collapse-arrow">▾</span>
+        </div>
+        <div class="panel-body" id="verification-body">
+          <div class="placeholder-text" id="verification-placeholder">Not verified yet.</div>
+          <div id="verification-result" class="hidden"></div>
+        </div>
+      </div>
+
+    </aside>
+  </div>
+
+  <!-- ── Status Bar ─────────────────────────────────────────────────────── -->
+  <footer class="statusbar">
+    <span id="statusbar-lang">Python</span>
+    <span class="statusbar-sep">|</span>
+    <span id="statusbar-cursor">Ln 1, Col 1</span>
+    <span class="statusbar-sep">|</span>
+    <span id="statusbar-message">Ready.</span>
+  </footer>
+
+  <!-- ── Optimization Modal ─────────────────────────────────────────────── -->
+  <div id="optimization-modal" class="modal hidden">
+    <div class="modal-backdrop"></div>
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <span>⚡ Code Optimization Suggestion</span>
+        <button class="modal-close" id="modal-close">✕</button>
+      </div>
+      <div class="modal-body" id="modal-body">
+        <div class="opt-section">
+          <div class="opt-label">Current Code</div>
+          <pre class="opt-code" id="opt-current-code"></pre>
+        </div>
+        <div class="opt-section">
+          <div class="opt-label">Suggested Improvement</div>
+          <pre class="opt-code opt-suggested" id="opt-suggested-code"></pre>
+        </div>
+        <div class="opt-section">
+          <div class="opt-label">Explanation</div>
+          <p id="opt-explanation"></p>
+        </div>
+        <div class="opt-section">
+          <div class="opt-label">Reason</div>
+          <p id="opt-reason"></p>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-apply-opt" id="btn-apply-opt">Apply Improvement</button>
+        <button class="btn btn-keep-opt" id="btn-keep-opt">Keep Current Code</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script src="/static/js/api.js"></script>
+  <script src="/static/js/editor.js"></script>
+  <script src="/static/js/workflow.js"></script>
+</body>
+</html>
